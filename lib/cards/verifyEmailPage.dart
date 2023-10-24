@@ -4,6 +4,7 @@ import 'package:cards2_app/home2.dart';
 import 'package:cards2_app/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../HomePage.dart';
 
 class VerifyEmailPage extends StatefulWidget {
   const VerifyEmailPage({super.key});
@@ -63,7 +64,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height;
     return isEmailVerified
-        ? HomeScreen2()
+        ? HomePage()
         : Scaffold(
             appBar: AppBar(
               title: Text('Verify Email'),

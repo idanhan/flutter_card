@@ -8,6 +8,8 @@ class cardPage {
   final String? backImagepath;
   final bool? is_done;
   final int? cardnum;
+  final int? foldernum;
+  final String? folderTitle;
 
   cardPage(
       {this.backImagepath,
@@ -16,7 +18,9 @@ class cardPage {
       this.frontText,
       this.title,
       this.is_done,
-      this.cardnum});
+      this.cardnum,
+      this.foldernum,
+      this.folderTitle});
   factory cardPage.fromFireStore(
       DocumentSnapshot<Map<String, dynamic>> snapshot) {
     final data = snapshot.data();
@@ -27,7 +31,9 @@ class cardPage {
         frontImagepath: data?['frontImagepath'],
         backImagepath: data?['backImagepath'],
         is_done: data?['is_done'],
-        cardnum: data?['cardnum']);
+        cardnum: data?['cardnum'],
+        foldernum: data?['foldernum'],
+        folderTitle: data?['folderTitle']);
   }
   Map<String, dynamic> toFireStore() {
     return {
@@ -38,6 +44,8 @@ class cardPage {
       if (backImagepath != null) "backImagepath": backImagepath,
       if (is_done != null) "is_done": is_done,
       if (cardnum != null) "cardnum": cardnum,
+      if (foldernum != null) "foldernum": foldernum,
+      if (folderTitle != null) "folderTitle": folderTitle,
     };
   }
 }

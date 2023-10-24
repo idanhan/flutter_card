@@ -1,9 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:cards2_app/boxWidg.dart';
 import 'package:cards2_app/cardmodule.dart';
-import 'package:cards2_app/cards/card1.dart';
 import 'package:cards2_app/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,9 +13,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import './cardobject.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
+import './drawer2.dart';
 
 class HomeScreen2 extends StatefulWidget {
-  HomeScreen2({super.key});
+  int foldernum;
+  String? homeTitle;
+  HomeScreen2({super.key, required this.foldernum, this.homeTitle});
 
   @override
   State<HomeScreen2> createState() => _HomeScreenState2();
@@ -74,7 +75,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     try {
       await FirebaseFirestore.instance
           .collection(user!.email!)
-          .doc('card$documentId')
+          .doc('folder${widget.foldernum}/card$documentId')
           .delete();
       print('Document successfully deleted');
     } catch (e) {
@@ -88,15 +89,19 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     final urlFront = Uri.parse(imageNetUrlFront);
     try {
       final storageFront = FirebaseStorage.instance.ref().child(
-          'images/${_sendtoEmailController.text.trim()}/$index/card$index/front');
-      final storageBack = FirebaseStorage.instance.ref().child(
-          'images/${_sendtoEmailController.text.trim()}/$index/card$index/back');
+          'images/${_sendtoEmailController.text.trim()}/folderreceived/$index/card$index/front');
       final bytesFront = await client.readBytes(urlFront);
-      final bytesBack = await client.readBytes(urlBack);
       storageFront.putData(bytesFront);
+    } catch (e) {
+      print('error accoured in downloading and putting files front $e');
+    }
+    try {
+      final storageBack = FirebaseStorage.instance.ref().child(
+          'images/${_sendtoEmailController.text.trim()}/folderreceived/$index/card$index/back');
+      final bytesBack = await client.readBytes(urlBack);
       storageBack.putData(bytesBack);
     } catch (e) {
-      print('error accoured in downloading and putting files $e');
+      print('error accoured in downloading and putting files back $e');
     }
   }
 
@@ -104,8 +109,9 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     try {
       final col =
           await FirebaseFirestore.instance.collection(user!.email!).get();
-      final doc = col.docs;
-      final docreference = doc[documentId].reference;
+      final doc =
+          col.docs.where((element) => element['foldernum'] == widget.foldernum);
+      final docreference = doc.toList()[documentId].reference;
       await docreference.delete();
       print('Document successfully deleted');
     } catch (e) {
@@ -119,21 +125,30 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     final int? counter = prefs.getInt('counter');
     print(counter);
     print(card_list.length);
-    if (counter != null && card_list.isEmpty && module_card.isEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection(user!.email!)
-          .orderBy('cardnum', descending: false)
-          .get();
-      final List<DocumentSnapshot> document = query.docs;
-      doclen = document.length;
-      if (doclen != 0) {
-        print("new here");
-        print(document.last['cardnum'] ?? 0);
-      }
-      _cardlen = doclen == 0 ? 0 : document.last['cardnum'];
+    final query = await FirebaseFirestore.instance
+        .collection(user!.email!)
+        .orderBy('foldernum')
+        .orderBy('cardnum')
+        .get();
+    final List<DocumentSnapshot> document = query.docs;
+    doclen = document.length;
+    if (doclen != 0) {
+      print("new here");
+      print(document.last['cardnum'] ?? 0);
+    }
+    try {
+      final lastFolderindex = document.lastIndexWhere(
+          (element) => element['foldernum'] == widget.foldernum);
+      final firstFolder = document
+          .firstWhere((element) => element['foldernum'] == widget.foldernum);
+      final firstFolderIndex = document.indexWhere((element) =>
+          (element['foldernum'] == firstFolder['foldernum'] &&
+              element['cardnum'] == firstFolder['cardnum']));
+      _cardlen =
+          lastFolderindex == -1 ? 0 : lastFolderindex - firstFolderIndex + 1;
       print("here counter");
-      print(counter);
-      for (int i = 0; i < doclen; i++) {
+      print(lastFolderindex);
+      for (int i = firstFolderIndex; i <= lastFolderindex; i++) {
         var cardnum = document[i];
         print("here");
         print(cardnum);
@@ -150,14 +165,20 @@ class _HomeScreenState2 extends State<HomeScreen2> {
               ),
             ));
             print(cardnum['title']);
-            module_card.add(
-                cardModule(card_num: cardnum["cardnum"], key: UniqueKey()));
+            module_card.add(cardModule(
+                card_num: cardnum['cardnum'],
+                folderNum: cardnum['foldernum'],
+                folderTitle: cardnum['folderTitle'],
+                is_done: true,
+                key: UniqueKey()));
             _isChecked.add(false);
           });
           print("module len");
           print(module_card.length);
         }
       }
+    } catch (e) {
+      print('exception occured in reload $e');
     }
   }
 
@@ -220,16 +241,15 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                   onPressed: () async {
                     await _decreasecount();
                     try {
-                      final images = FirebaseStorage.instance
-                          .ref()
-                          .child('images/${user!.email!.trim()}/$index');
+                      final images = FirebaseStorage.instance.ref().child(
+                          'images/${user!.email!.trim()}/foldernum${widget.foldernum}/$index');
                       final card = await FirebaseFirestore.instance
                           .collection(user!.email!.trim())
                           .get();
                       final card_num = card.docs.elementAt(index);
                       final card_ind = card_num['cardnum'] as int;
                       await deleteFolder(
-                          'images/${user!.email!.trim()}/${card_ind}/card${card_ind}/');
+                          'images/${user!.email!.trim()}/foldernum${widget.foldernum}/${card_ind}/card${card_ind}/');
                     } catch (e) {
                       print('error in deleting folder $e');
                     }
@@ -289,6 +309,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
               TextButton(
                   onPressed: () {
                     module_card[ind] = cardModule(
+                      folderNum: widget.foldernum,
                       card_num: module_card[ind].card_num,
                       key: module_card[ind].key!,
                       is_done: false,
@@ -296,6 +317,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                       back_description: module_card[ind].back_description,
                       title: module_card[ind].title,
                       is_update: true,
+                      folderTitle: module_card[ind].folderTitle,
                     );
                     Navigator.of(context).pop();
                     Navigator.push(
@@ -328,19 +350,54 @@ class _HomeScreenState2 extends State<HomeScreen2> {
   Future<void> _fetchNetworkImageUrl(int index) async {
     try {
       final storage = FirebaseStorage.instance.ref();
-      final images = storage.child('images/${user!.email!.trim()}/$index');
+      final images = storage.child(
+          'images/${user!.email!.trim()}/foldernum${widget.foldernum}/$index');
       final dashImageRefFront = images.child('card$index/front');
-      final dashImageRefBack = images.child('card$index/back');
+
       final networkImageUrlFront = await dashImageRefFront.getDownloadURL();
-      final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
       setState(() {
         imageNetUrlFront = networkImageUrlFront;
+      });
+    } catch (e) {
+      print('error in front image storage $e');
+    }
+    try {
+      final storage = FirebaseStorage.instance.ref();
+      final images = storage.child(
+          'images/${user!.email!.trim()}/foldernum${widget.foldernum}/$index');
+      final dashImageRefBack = images.child('card$index/back');
+      final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
+      setState(() {
         imageNetUrlBack = networkImageUrlBack;
       });
     } catch (e) {
-      print('error in fetching storage $e');
-      imageNetUrlBack = '';
-      imageNetUrlFront = '';
+      print('error in back image storage $e');
+    }
+    try {
+      final storage = FirebaseStorage.instance.ref();
+      final images =
+          storage.child('images/${user!.email!.trim()}/folderreceived/$index');
+      final dashImageRefFront = images.child('card$index/front');
+
+      final networkImageUrlFront = await dashImageRefFront.getDownloadURL();
+
+      setState(() {
+        imageNetUrlFront = networkImageUrlFront;
+      });
+    } catch (e) {
+      print('error in sent card front storage $e');
+    }
+    try {
+      final storage = FirebaseStorage.instance.ref();
+      final images =
+          storage.child('images/${user!.email!.trim()}/folderreceived/$index');
+      final dashImageRefBack = images.child('card$index/back');
+      final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
+      setState(() {
+        imageNetUrlBack = networkImageUrlBack;
+      });
+    } catch (e) {
+      print('error in sent card back storage $e');
     }
   }
 
@@ -416,7 +473,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     cardPage map1;
     final snap = await FirebaseFirestore.instance
         .collection(user!.email!)
-        .doc('card$indsource')
+        .doc('foldernum${widget.foldernum}/card$indsource')
         .get()
         .then((value) => value);
     map1 = cardPage.fromFireStore(snap);
@@ -426,13 +483,14 @@ class _HomeScreenState2 extends State<HomeScreen2> {
         frontImagepath: map1.frontImagepath,
         backText: map1.backImagepath,
         backImagepath: map1.backImagepath,
-        is_done: map1.is_done);
+        is_done: map1.is_done,
+        foldernum: widget.foldernum);
     print('to to');
     print(map1.title);
     final json = card.toFireStore();
     await FirebaseFirestore.instance
         .collection(user!.email!)
-        .doc('card$indDest')
+        .doc('foldernum${widget.foldernum}/card$indDest')
         .set(json);
     deleteDocument(indsource);
   }
@@ -444,62 +502,97 @@ class _HomeScreenState2 extends State<HomeScreen2> {
   }
 
   Future<void> _sendCard(List<int> list) async {
+    int sentIndexFolderNum = 0;
+    int folderTitleNUm = -1;
+    int sentCardFolder = -1;
+    int lastFolderNum = -1;
+    int lastCardnum = -1;
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> tempT;
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> sent1;
     final card = await FirebaseFirestore.instance
         .collection(user!.email!)
+        .orderBy('foldernum')
         .orderBy('cardnum')
         .get();
     final card2 = await FirebaseFirestore.instance
         .collection(_sendtoEmailController.text.trim());
     List<Map<String, dynamic>> cardDataList = [];
+    final firstIndex = card.docs
+        .indexWhere((element) => element['foldernum'] == widget.foldernum);
+    final sent = await card2.orderBy('foldernum').orderBy('cardnum').get();
+    if (sent.size != 0) {
+      final tempT = sent.docs.where((element) =>
+          element['folderTitle'].toString().compareTo('receivedCards') == 0);
+      if (tempT.isNotEmpty) {
+        sentCardFolder = tempT.first['foldernum'];
+      }
+      if (sentCardFolder != -1) {
+        lastCardnum = sent.docs.lastWhere((element) =>
+                element['folderTitle'].toString().compareTo('receivedCards') ==
+                0)['cardnum'] +
+            1;
+      } else {
+        lastCardnum = 0;
+      }
+      lastFolderNum = sent.docs.last['foldernum'];
+      final s = sent.docs.last['cardnum'];
+      sentIndexFolderNum =
+          sent.docs.lastIndexWhere((element) => element['cardnum'] == s);
+      sent1 = sent.docs.where((element) =>
+          element['folderTitle'].toString().compareTo('receivedCards') == 0);
+      if (sent1.isNotEmpty) {
+        folderTitleNUm = sent1.last['cardnum'];
+      }
+    }
     for (final index in list) {
-      var cardNum = card.docs.elementAt(index);
+      var cardNum = card.docs.elementAt(index + firstIndex);
       int num = cardNum['cardnum'];
       print('num');
       print(num);
       await _fetchNetworkImageUrl(num);
       print('fronturl');
       print(imageNetUrlFront);
-      Reference images = FirebaseStorage.instance
-          .ref()
-          .child('images/${_sendtoEmailController.text.trim()}/$num');
+      Reference images = FirebaseStorage.instance.ref().child(
+          'images/${_sendtoEmailController.text.trim()}/foldernum${widget.foldernum}/$num');
       Reference dashImageRefFront = images.child('card$num/front');
-      /*var fileFront = imageNetUrlFront != ''
-          ? File.fromUri(Uri.parse(imageNetUrlFront))
-          : null;
-      Reference dashImageRefBack = images.child('card$num/back');
-      File? fileBack = imageNetUrlBack != ''
-          ? File.fromUri(Uri.parse(imageNetUrlBack))
-          : null;
-      
-      if (fileFront != null && fileFront.existsSync()) {
-        await dashImageRefFront.putFile(fileFront);
-      }
-      if (fileBack != null && fileBack.existsSync()) {
-        await dashImageRefBack.putFile(fileBack);
-      }*/
-      var cardind = await card2.orderBy('cardnum', descending: false).get();
-      int ind = cardind.docs.last['cardnum'];
-      print(ind);
-      _DownloadAndStorageImages(ind + 1);
-      cardDataList.add(card.docs[index].data());
-      final cardD = card.docs[index].data();
+      var cardind = await card2
+          .orderBy('foldernum')
+          .orderBy('cardnum', descending: false)
+          .get();
+      int ind2 = sentCardFolder != -1 ? sentCardFolder : lastFolderNum + 1;
+      int ind = lastCardnum;
+      print('ind2');
+      print(ind2);
+      _DownloadAndStorageImages(lastCardnum);
+      cardDataList.add(card.docs[index + firstIndex].data());
+      final cardD = card.docs[index + firstIndex].data();
 
       createCard(
           cardD['frontText'] ?? "",
           cardD['backText'] ?? "",
-          ind++ + 1,
+          lastCardnum++,
           cardD['frontImagepath'] ?? "",
           cardD['backImagepath'] ?? "",
           cardD['is_done'] ?? "",
-          cardD['title'] ?? "");
+          cardD['title'] ?? "",
+          sentCardFolder != -1 ? sentCardFolder : lastFolderNum + 1,
+          'receivedCards');
     }
   }
 
-  Future createCard(String ques, String ans, int cardNum, String frontImagePath,
-      String backImagePath, bool is_done, String title) async {
+  Future createCard(
+      String ques,
+      String ans,
+      int cardNum,
+      String frontImagePath,
+      String backImagePath,
+      bool is_done,
+      String title,
+      int foldernum,
+      String folderTitle) async {
     final docCard = FirebaseFirestore.instance
         .collection(_sendtoEmailController.text.trim())
-        .doc('card${cardNum}');
+        .doc('receivedCards${cardNum}');
 
     final card = cardPage(
         title: title,
@@ -508,7 +601,9 @@ class _HomeScreenState2 extends State<HomeScreen2> {
         frontImagepath: frontImagePath,
         backImagepath: backImagePath,
         is_done: true,
-        cardnum: cardNum);
+        cardnum: cardNum,
+        foldernum: foldernum,
+        folderTitle: folderTitle);
 
     final json = card.toFireStore();
 
@@ -539,7 +634,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
           _sendButton(height, width, context),
         ],
       ),
-      drawer: Mydrawer(),
+      drawer: Mydrawer2(),
       body: Column(
         children: [
           SizedBox(
@@ -665,15 +760,17 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                   print("len");
                   print(_isChecked.length);
                   module_card.add(cardModule(
+                    folderNum: widget.foldernum,
                     card_num: _cardlen++ + 1,
                     key: UniqueKey(),
+                    folderTitle: widget.homeTitle,
                   ));
                   _cardind.add(_cardlen);
                   pref.setInt("cardlen", _cardlen);
                   print("cards");
                   print(module_card.length);
                   print("onee");
-                  print(card_list.length);
+                  print(_cardlen);
                 });
               },
               style: ButtonStyle(

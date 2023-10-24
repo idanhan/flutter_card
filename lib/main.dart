@@ -11,11 +11,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import './homecard.dart';
 import './signIn.dart';
-import './cards/card1.dart';
-import './cards/card2.dart';
-import './cards/card3.dart';
-import 'cards/card4.dart';
-import 'cards/card5.dart';
+import './HomePage.dart';
 import './login.dart';
 import './login.dart';
 import './home2.dart';
@@ -73,18 +69,13 @@ class Main extends StatelessWidget {
                 child: Text("something went wrong!"),
               );
             } else if (snapshot.hasData) {
-              return VerifyEmailPage();
+              return const VerifyEmailPage();
             } else {
-              return AuthPage();
+              return const AuthPage();
             }
           }),
       routes: {
-        "homePage": (context) => const HomeScreen(),
-        "card0": (context) => const card1(),
-        "card1": (context) => const card2(),
-        "card2": (context) => const card3(),
-        "card3": (context) => const card4(),
-        "card4": (context) => const card5(),
+        "homePage": (context) => const HomePage(),
       },
     );
   }

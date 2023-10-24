@@ -1,5 +1,6 @@
 import 'package:cards2_app/constants.dart';
 import 'package:cards2_app/home2.dart';
+import 'package:cards2_app/homePage.dart';
 import 'package:cards2_app/main.dart';
 import 'package:cards2_app/utils.dart';
 import 'package:flutter/gestures.dart';
@@ -59,7 +60,7 @@ class _SignupPageState extends State<SignupPage> {
             stream: FirebaseAuth.instance.authStateChanges(),
             builder: (context, snapshot) {
               if (snapshot.hasData) {
-                return HomeScreen2();
+                return HomePage();
               } else {
                 return GestureDetector(
                   onTap: () {

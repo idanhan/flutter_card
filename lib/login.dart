@@ -5,6 +5,7 @@ import 'package:cards2_app/main.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import './HomePage.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onClickedSignUp;
@@ -55,7 +56,7 @@ class _LoginPageState extends State<LoginPage> {
             stream: FirebaseAuth.instance.authStateChanges(),
             builder: (context, snapshot) {
               if (snapshot.hasData) {
-                return HomeScreen2();
+                return HomePage();
               } else {
                 return GestureDetector(
                   onTap: () {

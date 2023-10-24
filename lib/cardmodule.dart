@@ -34,6 +34,8 @@ class cardModule extends StatefulWidget {
   bool is_once_ques = false;
   bool is_hebrew_ans = false;
   bool is_once_ans = false;
+  int folderNum;
+  String? folderTitle;
 
   cardModule(
       {this.is_done,
@@ -41,7 +43,9 @@ class cardModule extends StatefulWidget {
       this.back_description,
       this.title,
       required this.card_num,
+      required this.folderNum,
       this.is_update,
+      this.folderTitle,
       required Key key})
       : super(key: key);
 
@@ -109,7 +113,7 @@ class cardModuleState extends State<cardModule>
   Future createCard({required String datatitle}) async {
     final docCard = FirebaseFirestore.instance
         .collection(user!.email!)
-        .doc('card${widget.card_num}');
+        .doc('foldernum${widget.folderNum}card${widget.card_num}');
 
     final card = cardPage(
         title: datatitle,
@@ -118,10 +122,12 @@ class cardModuleState extends State<cardModule>
         frontImagepath: imageStrQue,
         backImagepath: imageStrAns,
         is_done: true,
-        cardnum: widget.card_num);
+        cardnum: widget.card_num,
+        foldernum: widget.folderNum,
+        folderTitle: widget.folderTitle);
     final json = card.toFireStore();
-    final images =
-        storage.child('images/${user!.email!.trim()}/${widget.card_num}');
+    final images = storage.child(
+        'images/${user!.email!.trim()}/foldernum${widget.folderNum}/${widget.card_num}');
     final dashImageRefFront = images.child('card${widget.card_num}/front');
     final fileFront = imageStrQue != null ? File(imageStrQue!) : null;
     final dashImageRefBack = images.child('card${widget.card_num}/back');
@@ -140,7 +146,7 @@ class cardModuleState extends State<cardModule>
   Future<void> updateCard() async {
     DocumentReference docref = FirebaseFirestore.instance
         .collection(user!.email!)
-        .doc('card${widget.card_num}');
+        .doc('foldernum${widget.folderNum}card${widget.card_num}');
     dynamic cardval = await docref.get().then((value) => value);
 
     Map<String, dynamic> updatedata = {
@@ -190,36 +196,63 @@ class cardModuleState extends State<cardModule>
 
   Future<void> _fetchNetworkImageUrl() async {
     final storage = FirebaseStorage.instance.ref();
-    final images =
-        storage.child('images/${user!.email!.trim()}/${widget.card_num}');
     try {
+      final images = storage.child(
+          'images/${user!.email!.trim()}/foldernum${widget.folderNum}/${widget.card_num}');
       final dashImageRefFront = images.child('card${widget.card_num}/front');
       final networkImageUrlFront = await dashImageRefFront.getDownloadURL();
       setState(() {
         imageNetUrlFront = networkImageUrlFront;
       });
     } catch (e) {
-      print('error in fetching storage $e');
-      imageNetUrlFront = '';
+      print('error in fetching storage front $e');
     }
     try {
+      final images = storage.child(
+          'images/${user!.email!.trim()}/foldernum${widget.folderNum}/${widget.card_num}');
       final dashImageRefBack = images.child('card${widget.card_num}/back');
       final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
       setState(() {
         imageNetUrlBack = networkImageUrlBack;
       });
-    } catch (er) {
-      imageNetUrlBack = '';
+    } catch (e) {
+      print('error in fetching storage back $e');
+    }
+    try {
+      final images = storage.child(
+          'images/${user!.email!.trim()}/folderreceived/${widget.card_num}');
+      final dashImageRefBack = images.child('card${widget.card_num}/back');
+      final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
+      setState(() {
+        imageNetUrlBack = networkImageUrlBack;
+      });
+    } catch (e) {
+      print('error in fetching storage back received $e');
+    }
+    try {
+      final images = storage.child(
+          'images/${user!.email!.trim()}/folderreceived/${widget.card_num}');
+      final dashImageRefFront = images.child('card${widget.card_num}/front');
+      final networkImageUrlFront = await dashImageRefFront.getDownloadURL();
+      setState(() {
+        imageNetUrlFront = networkImageUrlFront;
+      });
+    } catch (e) {
+      print('error in fetching storage front received $e');
     }
   }
 
   Stream<cardPage> readcard2() async* {
-    final cards =
-        await FirebaseFirestore.instance.collection(user!.email!).get();
+    final cards = await FirebaseFirestore.instance
+        .collection(user!.email!)
+        .orderBy('foldernum')
+        .orderBy('cardnum')
+        .get();
     print("widget");
     print(widget.card_num);
-    final ind = cards.docs
-        .indexWhere((element) => element["cardnum"] == widget.card_num);
+    final ind = cards.docs.indexWhere((element) =>
+        (element["cardnum"] == widget.card_num &&
+            element['foldernum'] == widget.folderNum));
     print("index");
     print(ind);
     print(widget.card_num);
@@ -362,7 +395,8 @@ class cardModuleState extends State<cardModule>
         await FirebaseFirestore.instance.collection(user!.email!).get();
     final List<DocumentSnapshot> document = query.docs;
     final docind = document.where((element) =>
-        int.parse(element["cardnum"].toString()) == widget.card_num);
+        (int.parse(element["cardnum"].toString()) == widget.card_num) &&
+        element['foldernum'] == widget.folderNum);
     if (docind.isNotEmpty && widget.is_update != true) {
       setState(() {
         widget.is_done = true;
@@ -484,7 +518,8 @@ class cardModuleState extends State<cardModule>
                             ),
                             TextFormField(
                               onChanged: (text) {
-                                if (text.codeUnitAt(0) >= 0x0590 &&
+                                if (text.isNotEmpty &&
+                                    text.codeUnitAt(0) >= 0x0590 &&
                                     text.codeUnitAt(0) <= 0x05FF &&
                                     widget.is_once_title == false) {
                                   print('its hebrew!!!');
@@ -520,7 +555,8 @@ class cardModuleState extends State<cardModule>
                             const Text("Question Input: "),
                             TextFormField(
                               onChanged: (text) {
-                                if (text.codeUnitAt(0) >= 0x0590 &&
+                                if (text.isNotEmpty &&
+                                    text.codeUnitAt(0) >= 0x0590 &&
                                     text.codeUnitAt(0) <= 0x05FF &&
                                     widget.is_once_ques == false) {
                                   print('its hebrew!!!');
@@ -557,7 +593,8 @@ class cardModuleState extends State<cardModule>
                             const Text("Answer Input: "),
                             TextFormField(
                               onChanged: (text) {
-                                if (text.codeUnitAt(0) >= 0x0590 &&
+                                if (text.isNotEmpty &&
+                                    text.codeUnitAt(0) >= 0x0590 &&
                                     text.codeUnitAt(0) <= 0x05FF &&
                                     widget.is_once_ans == false) {
                                   print('its hebrew!!!');

@@ -1,7 +1,6 @@
 import 'package:cards2_app/boxWidg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cards2_app/cardmodule.dart';
-import 'package:cards2_app/cards/card1.dart';
 import 'package:cards2_app/constants.dart';
 import 'package:flutter/material.dart';
 import './col.dart';
@@ -11,7 +10,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import './cardobject.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  int foldernum;
+  HomeScreen({super.key, required this.foldernum});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -94,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ));
             module_card.add(cardModule(
+              folderNum: widget.foldernum,
               card_num: cardnum["card_num"],
               key: UniqueKey(),
               is_done: true,
@@ -312,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ));
                   _ispageready.add(false);
                   module_card.add(cardModule(
+                    folderNum: widget.foldernum,
                     card_num: _cardlen,
                     key: UniqueKey(),
                   ));
