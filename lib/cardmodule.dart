@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/ui/firebase_animated_list.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import './constants.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -18,6 +18,8 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'dart:io';
+
+import 'modules/cardsM.dart';
 
 class cardModule extends StatefulWidget {
   PlatformFile? pickFile;
@@ -97,17 +99,62 @@ class cardModuleState extends State<cardModule>
   }
 
   Future<void> _selecteImage(bool? is_que) async {
-    final picker = ImagePicker();
-    final PickedFile = await picker.pickImage(source: ImageSource.gallery);
-    File? image1 = File(PickedFile!.path);
-    File? image2 = await _cropImage(imageFile: PickedFile);
-    setState(() {
-      if (is_que! && image2 != null) {
-        imageStrQue = image2.path;
-      } else {
-        imageStrAns = image1.path;
-      }
-    });
+    ImageSource imageSource = ImageSource.gallery;
+    showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            content: Text('Pick image from camera or gallery?'),
+            actions: <Widget>[
+              ElevatedButton.icon(
+                  onPressed: () async {
+                    imageSource = ImageSource.camera;
+                    try {
+                      final picker = ImagePicker();
+                      final PickedFile =
+                          await picker.pickImage(source: imageSource);
+                      File? image1 = File(PickedFile!.path);
+                      File? image2 = await _cropImage(imageFile: PickedFile);
+                      setState(() {
+                        if (is_que! && image2 != null) {
+                          imageStrQue = image2.path;
+                        } else {
+                          imageStrAns = image1.path;
+                        }
+                      });
+                      Navigator.of(context).pop();
+                    } catch (e) {
+                      print('error in image loading $e');
+                    }
+                  },
+                  icon: Icon(Icons.camera),
+                  label: Text('camera')),
+              ElevatedButton.icon(
+                  onPressed: () async {
+                    imageSource = ImageSource.gallery;
+                    try {
+                      final picker = ImagePicker();
+                      final PickedFile =
+                          await picker.pickImage(source: imageSource);
+                      File? image1 = File(PickedFile!.path);
+                      File? image2 = await _cropImage(imageFile: PickedFile);
+                      setState(() {
+                        if (is_que! && image2 != null) {
+                          imageStrQue = image2.path;
+                        } else {
+                          imageStrAns = image1.path;
+                        }
+                      });
+                      Navigator.of(context).pop();
+                    } catch (e) {
+                      print('error in image loading $e');
+                    }
+                  },
+                  icon: Icon(Icons.browse_gallery),
+                  label: Text('gallery'))
+            ],
+          );
+        });
   }
 
   Future createCard({required String datatitle}) async {
@@ -178,6 +225,28 @@ class cardModuleState extends State<cardModule>
     } catch (error) {
       print("error updating doc: $error");
     }
+
+    if (imageStrQue != null) {
+      try {
+        print("foldernum cardnum ${widget.folderNum} ${widget.card_num}");
+        final storage2 = FirebaseStorage.instance.ref().child(
+            'images/${user!.email!.trim()}/foldernum${widget.folderNum}/${widget.card_num}/card${widget.card_num}/front');
+        storage2.delete();
+        storage2.putFile(File(imageStrQue!));
+      } catch (e) {
+        print('deletion of question image went wrong $e');
+      }
+    }
+    if (imageStrAns != null) {
+      try {
+        final storage3 = FirebaseStorage.instance.ref().child(
+            'images/${user!.email!.trim()}/foldernum${widget.folderNum}/${widget.card_num}/card${widget.card_num}/back');
+        storage3.delete();
+        storage3.putFile(File(imageStrAns!));
+      } catch (e) {
+        print('deletion of answer image went wrong $e');
+      }
+    }
   }
 
   Stream<List<cardPage>> readCard() => FirebaseFirestore.instance
@@ -195,6 +264,7 @@ class cardModuleState extends State<cardModule>
   }
 
   Future<void> _fetchNetworkImageUrl() async {
+    print('folder num ${widget.folderNum}');
     final storage = FirebaseStorage.instance.ref();
     try {
       final images = storage.child(
@@ -218,27 +288,30 @@ class cardModuleState extends State<cardModule>
     } catch (e) {
       print('error in fetching storage back $e');
     }
-    try {
-      final images = storage.child(
-          'images/${user!.email!.trim()}/folderreceived/${widget.card_num}');
-      final dashImageRefBack = images.child('card${widget.card_num}/back');
-      final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
-      setState(() {
-        imageNetUrlBack = networkImageUrlBack;
-      });
-    } catch (e) {
-      print('error in fetching storage back received $e');
-    }
-    try {
-      final images = storage.child(
-          'images/${user!.email!.trim()}/folderreceived/${widget.card_num}');
-      final dashImageRefFront = images.child('card${widget.card_num}/front');
-      final networkImageUrlFront = await dashImageRefFront.getDownloadURL();
-      setState(() {
-        imageNetUrlFront = networkImageUrlFront;
-      });
-    } catch (e) {
-      print('error in fetching storage front received $e');
+    if (widget.folderTitle!.compareTo('receivedCards') == 0) {
+      print('look here');
+      try {
+        final images = storage.child(
+            'images/${user!.email!.trim()}/folderreceived/${widget.card_num}');
+        final dashImageRefBack = images.child('card${widget.card_num}/back');
+        final networkImageUrlBack = await dashImageRefBack.getDownloadURL();
+        setState(() {
+          imageNetUrlBack = networkImageUrlBack;
+        });
+      } catch (e) {
+        print('error in fetching storage back received $e');
+      }
+      try {
+        final images = storage.child(
+            'images/${user!.email!.trim()}/folderreceived/${widget.card_num}');
+        final dashImageRefFront = images.child('card${widget.card_num}/front');
+        final networkImageUrlFront = await dashImageRefFront.getDownloadURL();
+        setState(() {
+          imageNetUrlFront = networkImageUrlFront;
+        });
+      } catch (e) {
+        print('error in fetching storage front received $e');
+      }
     }
   }
 
@@ -254,7 +327,7 @@ class cardModuleState extends State<cardModule>
         (element["cardnum"] == widget.card_num &&
             element['foldernum'] == widget.folderNum));
     print("index");
-    print(ind);
+    print(widget.folderNum);
     print(widget.card_num);
     if (cards.docs[ind]["is_done"]) {
       widget.is_done = true;
@@ -379,7 +452,7 @@ class cardModuleState extends State<cardModule>
                 ),
                 ElevatedButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      Navigator.of(context).pop({'title': '', 'done': false});
                     },
                     child: const Icon(Icons.home)),
               ]),
@@ -532,6 +605,7 @@ class cardModuleState extends State<cardModule>
                                   });
                                 }
                               },
+                              enabled: true,
                               textAlign: _hebrew(widget.is_hebrew_title),
                               minLines: 1,
                               maxLines: 20,
@@ -569,6 +643,7 @@ class cardModuleState extends State<cardModule>
                                   });
                                 }
                               },
+                              enabled: true,
                               textAlign: _hebrew(widget.is_hebrew_ques),
                               minLines: 1,
                               maxLines: 100,
@@ -609,6 +684,7 @@ class cardModuleState extends State<cardModule>
                                 print("is_hebrew");
                                 print(widget.is_hebrew_ans);
                               },
+                              enabled: true,
                               textAlign: _hebrew(widget.is_hebrew_ans),
                               minLines: 1,
                               maxLines: 100,
@@ -678,14 +754,16 @@ class cardModuleState extends State<cardModule>
                                   print("title");
                                   print(title);
                                   widget.is_update = false;
-                                  Navigator.of(context).pop(title);
+                                  Navigator.of(context)
+                                      .pop({'title': title, 'done': true});
                                 } else {
                                   title = controller1.text;
                                   question = controller2.text;
                                   answer = controller3.text;
                                   widget.is_done = true;
                                   await _showCircularProg(context);
-                                  Navigator.of(context).pop(title);
+                                  Navigator.of(context)
+                                      .pop({'title': title, 'done': true});
                                 }
                               },
                               child: const Icon(Icons.save)),

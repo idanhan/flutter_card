@@ -36,7 +36,7 @@ class _SignupPageState extends State<SignupPage> {
       showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => Center(
+          builder: (context) => const Center(
                 child: CircularProgressIndicator(),
               ));
       try {

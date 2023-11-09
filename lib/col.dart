@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import './constants.dart';
-import './boxWidg.dart';
 
 class ColWidget extends StatefulWidget {
   const ColWidget({super.key});

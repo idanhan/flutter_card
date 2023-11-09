@@ -1,4 +1,3 @@
-import 'package:cards2_app/boxWidg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cards2_app/cardmodule.dart';
 import 'package:cards2_app/constants.dart';

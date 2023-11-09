@@ -1,11 +1,11 @@
-import 'dart:io';
-
-import 'package:cards2_app/boxWidg.dart';
 import 'package:cards2_app/cardmodule.dart';
 import 'package:cards2_app/constants.dart';
+import 'package:cards2_app/finishedcard.dart';
+import 'package:cards2_app/modules/cardsObject.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import './col.dart';
 import './drawer1.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +14,9 @@ import './cardobject.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import './drawer2.dart';
+import './modules/cardsM.dart';
+import './modules/cardsObject.dart';
+import './newCard.dart';
 
 class HomeScreen2 extends StatefulWidget {
   int foldernum;
@@ -42,6 +45,13 @@ class _HomeScreenState2 extends State<HomeScreen2> {
       _selectedindex = index;
     });
   }
+
+  int finalfoldnum = -1;
+  bool isintializedone = false;
+
+  bool is_remove = false;
+  CardList? cardlist;
+  cardModulePro? cardModPro;
 
   List<bool> _isChecked = [];
 
@@ -148,33 +158,30 @@ class _HomeScreenState2 extends State<HomeScreen2> {
           lastFolderindex == -1 ? 0 : lastFolderindex - firstFolderIndex + 1;
       print("here counter");
       print(lastFolderindex);
+      int checkint = 0;
       for (int i = firstFolderIndex; i <= lastFolderindex; i++) {
         var cardnum = document[i];
-        print("here");
+        print("here last and first $lastFolderindex $firstFolderIndex");
         print(cardnum);
         if (cardnum != null && cardnum['is_done'] == true) {
+          checkint++;
           setState(() {
-            card_list.add(Card(
-              key: ValueKey(cardnum['title']),
-              color: COLOR_DARK_BLUE,
-              child: Center(
-                child: Text(
-                  cardnum['title'],
-                  style: const TextStyle(color: COLOR_WHITE),
-                ),
-              ),
+            cardlist!.addCard(NewCard(
+              cardnum: cardnum['cardnum'],
+              foldernum: cardnum['foldernum'],
+              cardName: cardnum['title'],
+              key: UniqueKey(),
             ));
             print(cardnum['title']);
-            module_card.add(cardModule(
+            cardModPro!.add(cardModule(
                 card_num: cardnum['cardnum'],
                 folderNum: cardnum['foldernum'],
                 folderTitle: cardnum['folderTitle'],
                 is_done: true,
                 key: UniqueKey()));
-            _isChecked.add(false);
+            print("is_checked ${_isChecked.length}");
           });
-          print("module len");
-          print(module_card.length);
+          print("module len ${cardModPro!.cardLen()}");
         }
       }
     } catch (e) {
@@ -182,11 +189,67 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     }
   }
 
+  Future<void> reloadData2() async {
+    print('widget num ${widget.foldernum}');
+    final query = await FirebaseFirestore.instance
+        .collection(user!.email!)
+        .orderBy('foldernum')
+        .orderBy('cardnum')
+        .get();
+    final List<DocumentSnapshot> document = query.docs;
+    doclen = document.length;
+    final lastCardind = document
+        .lastIndexWhere((element) => element['foldernum'] == widget.foldernum);
+    print('lastindd $lastCardind');
+    final firstCardind = document
+        .indexWhere((element) => element['foldernum'] == widget.foldernum);
+    print('firstinddd $firstCardind');
+    final finalfolder = document
+        .lastIndexWhere((element) => element['foldernum'] == widget.foldernum);
+    _cardlen = lastCardind == -1 ? 0 : document[lastCardind]['cardnum'];
+  }
+
+  void intialize(CardList card, cardModulePro modulePro) {
+    int first = modulePro.cardModulepro
+        .indexWhere((element) => element.folderNum == widget.foldernum);
+    int last = modulePro.cardModulepro
+        .lastIndexWhere((element) => element.folderNum == widget.foldernum);
+    print('answer? first ${first}');
+    print('answer? last $last');
+    if (card.cardList.isNotEmpty &&
+        card_list.isEmpty &&
+        first != -1 &&
+        last != -1) {
+      print('first inddd ${first}');
+      print('last inddd ${last}');
+      print('finalfold ${finalfoldnum}');
+      _cardlen = modulePro.cardModulepro[last].card_num;
+
+      for (int i = first; i <= last; i++) {
+        _isChecked.add(false);
+        card_list.add(Card(
+          color: COLOR_DARK_BLUE,
+          child: Center(
+            child: card.cardList[i].cardName != null
+                ? Text(
+                    card.cardList[i].cardName!,
+                    style: TextStyle(color: COLOR_WHITE),
+                  )
+                : const SizedBox(),
+          ),
+        ));
+        module_card.add(modulePro.cardModulepro[i]);
+        print('i $i');
+      }
+    } else if (first == -1) {
+      first = 0;
+    }
+    isintializedone = true;
+  }
+
   @override
   void initState() {
     super.initState();
-    orderindex();
-    reloadData();
   }
 
   Future<void> _incrementcount() async {
@@ -218,7 +281,8 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     });
   }
 
-  Future<void> _deleteMessage(BuildContext context, int index) async {
+  Future<void> _deleteMessage(BuildContext context, int index, CardList card,
+      cardModulePro modulePro, int first, int last) async {
     // ignore: use_build_context_synchronously
     return showDialog(
         context: context,
@@ -241,26 +305,32 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                   onPressed: () async {
                     await _decreasecount();
                     try {
-                      final images = FirebaseStorage.instance.ref().child(
-                          'images/${user!.email!.trim()}/foldernum${widget.foldernum}/$index');
                       final card = await FirebaseFirestore.instance
                           .collection(user!.email!.trim())
                           .get();
-                      final card_num = card.docs.elementAt(index);
+                      final card_num = card.docs.elementAt(index + first);
                       final card_ind = card_num['cardnum'] as int;
+                      print('cardnum in fol ${card_ind} ind ${index}');
                       await deleteFolder(
                           'images/${user!.email!.trim()}/foldernum${widget.foldernum}/${card_ind}/card${card_ind}/');
                     } catch (e) {
                       print('error in deleting folder $e');
                     }
-
-                    setState(() {
-                      card_list.removeAt(index);
-                      module_card.removeAt(index);
-                      _isChecked.removeAt(index);
-                      _ispageready.clear();
-                      deleteDocument2(index);
-                    });
+                    is_remove = true;
+                    await deleteDocument2(index);
+                    card_list.removeAt(index);
+                    card.removeCardAtIndex(index + first);
+                    module_card.removeAt(index);
+                    modulePro.remove(index + first);
+                    _isChecked.removeAt(index);
+                    _ispageready.clear();
+                    if (card_list.isEmpty) {
+                      reloadData2();
+                    } else {
+                      reloadData2();
+                      intialize(card, modulePro);
+                    }
+                    is_remove = false;
                     Navigator.of(context).pop();
                   },
                   child: const Text('Delete'))
@@ -286,7 +356,8 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     }
   }
 
-  Future<void> _editCard(BuildContext context, int ind) {
+  Future<void> _editCard(BuildContext context, int ind, CardList cardList,
+      cardModulePro cardModPro, int first, int last) {
     return showDialog(
         context: context,
         barrierDismissible: false,
@@ -307,7 +378,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                   },
                   child: const Text('cancel')),
               TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     module_card[ind] = cardModule(
                       folderNum: widget.foldernum,
                       card_num: module_card[ind].card_num,
@@ -319,13 +390,58 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                       is_update: true,
                       folderTitle: module_card[ind].folderTitle,
                     );
+                    /*cardModPro.setvalAt(
+                        ind + first,
+                        cardModule(
+                          folderNum: widget.foldernum,
+                          card_num:
+                              cardModPro.cardModulepro[ind + first].card_num,
+                          key: cardModPro.cardModulepro[ind + first].key!,
+                          is_done: false,
+                          front_description: cardModPro
+                              .cardModulepro[ind + first].front_description,
+                          back_description: cardModPro
+                              .cardModulepro[ind + first].back_description,
+                          title: cardModPro.cardModulepro[ind + first].title,
+                          is_update: true,
+                          folderTitle:
+                              cardModPro.cardModulepro[ind + first].folderTitle,
+                        ));*/
                     Navigator.of(context).pop();
-                    Navigator.push(
+                    Map<String, dynamic> map = await Navigator.push(
                         context,
                         MaterialPageRoute(
                             settings: const RouteSettings(name: '/home2'),
                             builder: (BuildContext context) =>
-                                module_card[ind])).then((value) {
+                                module_card[ind]));
+
+                    if (map['title'] != null && map['title'] != '') {
+                      setState(() {
+                        card_list[ind] = Card(
+                          color: COLOR_DARK_BLUE,
+                          key: UniqueKey(),
+                          child: Center(
+                              child: Text(
+                            map['title'],
+                            style: const TextStyle(color: COLOR_WHITE),
+                          )),
+                        );
+                        cardList.setCardValAt(
+                            ind + first,
+                            NewCard(
+                              cardnum: ind + first,
+                              foldernum: widget.foldernum,
+                              cardName: map['title'],
+                              key: UniqueKey(),
+                            ));
+                      });
+                    }
+                    if (map['done'] != null && map['done'] == true) {
+                      cardModPro.cardModulepro[ind + first].is_done = true;
+                      ;
+                      module_card[ind].is_done = true;
+                    }
+                    /*then((value) {
                       if (value != null) {
                         setState(() {
                           card_list[ind] = Card(
@@ -337,9 +453,22 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                               style: const TextStyle(color: COLOR_WHITE),
                             )),
                           );
+                          cardList.setCardValAt(
+                              ind + first,
+                              NewCard(
+                                cardnum: ind + first,
+                                foldernum: widget.foldernum,
+                                cardName: value,
+                                key: UniqueKey(),
+                              ));
                         });
                       }
-                    });
+                      /*if (value['is_done'] != null &&
+                          value['is_done'] == true) {
+                        cardModPro.changedone(ind + first);
+                        module_card[ind].is_done = true;
+                      }*/
+                    });*/
                   },
                   child: const Text("Edit"))
             ],
@@ -419,6 +548,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
                           height: height * 0.02,
                         ),
                         TextFormField(
+                          enabled: true,
                           controller: _sendtoEmailController,
                           decoration: const InputDecoration(
                             icon: Icon(Icons.text_fields),
@@ -514,7 +644,7 @@ class _HomeScreenState2 extends State<HomeScreen2> {
         .orderBy('foldernum')
         .orderBy('cardnum')
         .get();
-    final card2 = await FirebaseFirestore.instance
+    final card2 = FirebaseFirestore.instance
         .collection(_sendtoEmailController.text.trim());
     List<Map<String, dynamic>> cardDataList = [];
     final firstIndex = card.docs
@@ -566,7 +696,9 @@ class _HomeScreenState2 extends State<HomeScreen2> {
       _DownloadAndStorageImages(lastCardnum);
       cardDataList.add(card.docs[index + firstIndex].data());
       final cardD = card.docs[index + firstIndex].data();
-
+      if (lastCardnum == -1) {
+        lastCardnum = 0;
+      }
       createCard(
           cardD['frontText'] ?? "",
           cardD['backText'] ?? "",
@@ -610,184 +742,282 @@ class _HomeScreenState2 extends State<HomeScreen2> {
     await docCard.set(json);
   }
 
-  Future<void> orderindex() async {
-    await FirebaseFirestore.instance
-        .collection(user!.email!)
-        .orderBy('cardnum', descending: false)
-        .get();
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentContext = context;
     final height = MediaQuery.of(context).size.height;
     final width = MediaQuery.of(context).size.width;
     final allign = MediaQuery.of(context).orientation;
+
     return Scaffold(
       backgroundColor: Color.fromARGB(255, 172, 203, 241),
       appBar: AppBar(
         toolbarHeight: height * 0.09,
-        title: const Text("home"),
+        centerTitle: true,
+        title: Text("Card"),
         titleTextStyle: const TextStyle(color: COLOR_BlACK, fontSize: 22),
         iconTheme: const IconThemeData(color: COLOR_BlACK, size: 40),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(20)),
+        ),
         actions: [
           _sendButton(height, width, context),
         ],
       ),
       drawer: Mydrawer2(),
-      body: Column(
-        children: [
-          SizedBox(
-            height: height * 0.01,
-          ),
-          Expanded(
-            child: GridView.builder(
-              scrollDirection: Axis.vertical,
-              shrinkWrap: true,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 150,
-                childAspectRatio: 3.5 / 5,
+      body: Consumer2<cardModulePro, CardList>(
+        builder: (BuildContext context, cardModulePro modulevalue,
+            CardList cardvalue, Widget? child) {
+          intialize(cardvalue, modulevalue);
+          final card = cardvalue.cardList;
+          final module = modulevalue.cardModulepro;
+          final firstind = modulevalue.cardModulepro
+              .indexWhere((element) => element.folderNum == widget.foldernum);
+          final lastind = modulevalue.cardModulepro.lastIndexWhere(
+              (element) => element.folderNum == widget.foldernum);
+          print('lastindd ${modulevalue.cardLen()} end');
+          print('card at ind 0 ${cardvalue.cardLen()}');
+          print('foldernum ${widget.foldernum}');
+          return Column(
+            children: [
+              SizedBox(
+                height: height * 0.01,
               ),
-              itemBuilder: (BuildContext context, int index) {
-                return Container(
-                  margin: const EdgeInsets.all(5),
-                  child: card_list[index] == const SizedBox()
-                      ? const SizedBox()
-                      : Stack(
-                          children: [
-                            card_list[index],
-                            InkWell(
-                              onTap: () {
-                                print("asddsd");
-                                print(index);
-                                print(module_card.length);
-                                Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (BuildContext context) =>
-                                            module_card[index])).then((value) {
-                                  if (value != null) {
-                                    setState(() {
-                                      card_list[index] = Card(
-                                        color: COLOR_DARK_BLUE,
-                                        key: UniqueKey(),
-                                        child: Center(
-                                            child: Text(
-                                          value,
-                                          style: const TextStyle(
-                                              color: COLOR_WHITE),
-                                        )),
-                                      );
-                                    });
-                                  }
-                                });
-                              },
-                            ),
-                            Positioned(
-                                top: height * 0.01,
-                                right: width * 0.01,
-                                child: Checkbox(
-                                  value: _isChecked[index],
-                                  onChanged: (bool? val) {
-                                    setState(() {
-                                      _isChecked[index] = val!;
-                                    });
-                                    if (_isChecked[index] == true) {
-                                      _indexList.add(index);
-                                    } else {
-                                      _indexList.removeWhere(
-                                          (element) => element == index);
-                                    }
-                                    print(_indexList.length);
-                                  },
-                                )),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+              Expanded(
+                child: GridView.builder(
+                  scrollDirection: Axis.vertical,
+                  shrinkWrap: true,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 150,
+                    childAspectRatio: 3.5 / 5,
+                  ),
+                  itemBuilder: (BuildContext context, int index) {
+                    return Container(
+                      margin: const EdgeInsets.all(5),
+                      child: card_list[index] == const SizedBox()
+                          ? const SizedBox()
+                          : Stack(
                               children: [
-                                Flexible(
-                                  flex: 1,
-                                  child: Container(
-                                    margin: EdgeInsets.all(6),
-                                    alignment: Alignment.bottomLeft,
-                                    child: ElevatedButton(
-                                      child: const Icon(
-                                        Icons.delete,
-                                        color: COLOR_RED,
-                                      ),
-                                      onPressed: () async {
-                                        await _deleteMessage(context, index);
-                                      },
-                                    ),
-                                  ),
+                                card_list[index],
+                                InkWell(
+                                  onTap: () async {
+                                    print("asddsd");
+                                    print(index);
+                                    print(module_card.length);
+                                    Map<String, dynamic> map =
+                                        await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                                builder:
+                                                    (BuildContext context) =>
+                                                        module_card[index]));
+                                    if (map['title'] != null &&
+                                        map['title'] != '') {
+                                      setState(() {
+                                        card_list[index] = Card(
+                                          color: COLOR_DARK_BLUE,
+                                          key: UniqueKey(),
+                                          child: Center(
+                                              child: Text(
+                                            map['title'],
+                                            style: const TextStyle(
+                                                color: COLOR_WHITE),
+                                          )),
+                                        );
+                                        cardvalue.setCardValAt(
+                                            index + firstind,
+                                            NewCard(
+                                              cardnum: cardvalue
+                                                  .cardList[index + firstind]
+                                                  .cardnum,
+                                              foldernum: cardvalue
+                                                  .cardList[index + firstind]
+                                                  .foldernum,
+                                              cardName: map['title'],
+                                            ));
+                                      });
+                                    }
+                                    if (map['done'] != null &&
+                                        map['done'] == true) {
+                                      modulevalue
+                                          .cardModulepro[index + firstind]
+                                          .is_done = true;
+                                      module_card[index].is_done = true;
+                                    }
+                                    /*then(
+                                        (value) {
+                                      if (value['title'] != null) {
+                                        setState(() {
+                                          card_list[index] = Card(
+                                            color: COLOR_DARK_BLUE,
+                                            key: UniqueKey(),
+                                            child: Center(
+                                                child: Text(
+                                              value['title'],
+                                              style: const TextStyle(
+                                                  color: COLOR_WHITE),
+                                            )),
+                                          );
+                                          cardvalue.setCardValAt(
+                                              index + firstind,
+                                              NewCard(
+                                                cardnum: cardvalue
+                                                    .cardList[index + firstind]
+                                                    .cardnum,
+                                                foldernum: cardvalue
+                                                    .cardList[index + firstind]
+                                                    .foldernum,
+                                                cardName: value['title'],
+                                              ));
+                                        });
+                                      }
+                                      if (value['done'] != null &&
+                                          value['done'] == true) {
+                                        modulevalue
+                                            .cardModulepro[index + firstind]
+                                            .is_done = true;
+                                        module_card[index].is_done = true;
+                                      }
+                                    });*/
+                                  },
                                 ),
-                                Flexible(
-                                  flex: 1,
-                                  child: Container(
-                                    margin: const EdgeInsets.all(6),
-                                    alignment: Alignment.bottomRight,
-                                    child: ElevatedButton(
-                                        child: const Icon(Icons.edit),
-                                        onPressed: () {
-                                          _editCard(context, index);
-                                        }),
-                                  ),
+                                Positioned(
+                                    top: height * 0.01,
+                                    right: width * 0.01,
+                                    child: Checkbox(
+                                      value: _isChecked.isEmpty
+                                          ? false
+                                          : _isChecked[index],
+                                      onChanged: (bool? val) {
+                                        setState(() {
+                                          _isChecked[index] = val!;
+                                        });
+                                        if (_isChecked[index] == true) {
+                                          _indexList.add(index);
+                                        } else {
+                                          _indexList.removeWhere(
+                                              (element) => element == index);
+                                        }
+                                        print(_indexList.length);
+                                      },
+                                    )),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      flex: 1,
+                                      child: Container(
+                                        margin: EdgeInsets.all(6),
+                                        alignment: Alignment.bottomLeft,
+                                        child: ElevatedButton(
+                                          child: const Icon(
+                                            Icons.delete,
+                                            color: COLOR_RED,
+                                          ),
+                                          onPressed: () async {
+                                            await _deleteMessage(
+                                                context,
+                                                index,
+                                                cardvalue,
+                                                modulevalue,
+                                                firstind,
+                                                lastind);
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    Flexible(
+                                      flex: 1,
+                                      child: Container(
+                                        margin: const EdgeInsets.all(6),
+                                        alignment: Alignment.bottomRight,
+                                        child: ElevatedButton(
+                                            child: const Icon(Icons.edit),
+                                            onPressed: () {
+                                              _editCard(
+                                                  context,
+                                                  index,
+                                                  cardvalue,
+                                                  modulevalue,
+                                                  firstind,
+                                                  lastind);
+                                            }),
+                                      ),
+                                    )
+                                  ],
                                 )
                               ],
-                            )
-                          ],
+                            ),
+                    );
+                  },
+                  itemCount: card_list.length,
+                ),
+              ),
+              ElevatedButton(
+                  onPressed: () async {
+                    final SharedPreferences pref = await _prefs;
+                    await _incrementcount();
+                    setState(() {
+                      card_list.add(Card(
+                        key: UniqueKey(),
+                        color: COLOR_DARK_BLUE,
+                        child: InkWell(
+                          onTap: () {
+                            count1 + 1;
+                          },
                         ),
-                );
-              },
-              itemCount: card_list.length,
-            ),
-          ),
-          ElevatedButton(
-              onPressed: () async {
-                final SharedPreferences pref = await _prefs;
-                await _incrementcount();
-                setState(() {
-                  card_list.add(Card(
-                    key: UniqueKey(),
-                    color: COLOR_DARK_BLUE,
-                    child: InkWell(
-                      onTap: () {
-                        count1++;
-                      },
-                    ),
-                  ));
-                  _ispageready.add(false);
-                  _isChecked.add(false);
-                  print("len");
-                  print(_isChecked.length);
-                  module_card.add(cardModule(
-                    folderNum: widget.foldernum,
-                    card_num: _cardlen++ + 1,
-                    key: UniqueKey(),
-                    folderTitle: widget.homeTitle,
-                  ));
-                  _cardind.add(_cardlen);
-                  pref.setInt("cardlen", _cardlen);
-                  print("cards");
-                  print(module_card.length);
-                  print("onee");
-                  print(_cardlen);
-                });
-              },
-              style: ButtonStyle(
-                  backgroundColor: MaterialStateProperty.all(COLOR_WHITE)),
-              child: Column(
-                children: const [
-                  Text(
-                    "Add new card",
-                    style: TextStyle(color: COLOR_BlACK),
-                  ),
-                  Icon(
-                    Icons.add,
-                    color: COLOR_BlACK,
-                  ),
-                ],
-              )),
-        ],
+                      ));
+                      cardvalue.insertByFolderNCard(
+                        NewCard(
+                            cardnum: _cardlen + 1, foldernum: widget.foldernum),
+                        widget.foldernum,
+                      );
+                      _ispageready.add(false);
+                      _isChecked.add(false);
+                      print("len");
+                      print(card.length);
+                      module_card.add(cardModule(
+                        folderNum: widget.foldernum,
+                        card_num: _cardlen + 1,
+                        key: UniqueKey(),
+                        folderTitle: widget.homeTitle,
+                      ));
+                      modulevalue.insertByFolderNCard(
+                          cardModule(
+                            folderNum: widget.foldernum,
+                            card_num: _cardlen + 1,
+                            key: UniqueKey(),
+                            folderTitle: widget.homeTitle,
+                          ),
+                          widget.foldernum);
+                      _cardlen++;
+                      _cardind.add(_cardlen);
+                      pref.setInt("cardlen", _cardlen);
+                    });
+                    print("cards");
+                    print(module_card.length);
+                    print("onee");
+                    print(_cardlen);
+                  },
+                  style: ButtonStyle(
+                      backgroundColor: MaterialStateProperty.all(COLOR_WHITE)),
+                  child: Column(
+                    children: const [
+                      Text(
+                        "Add new card",
+                        style: TextStyle(color: COLOR_BlACK),
+                      ),
+                      Icon(
+                        Icons.add,
+                        color: COLOR_BlACK,
+                      ),
+                    ],
+                  )),
+            ],
+          );
+        },
       ),
     );
   }
